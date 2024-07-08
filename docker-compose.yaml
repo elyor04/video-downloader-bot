@@ -2,12 +2,13 @@ name: video-downloader-bot
 
 services:
   ffmpeg:
-    image: jrottenberg/ffmpeg:latest
+    image: jrottenberg/ffmpeg:4.4-alpine
     container_name: ffmpeg
     restart: always
-    working_dir: /ffmpeg
     volumes:
-      - ./:/ffmpeg
+      - ./input:/input
+      - ./output:/output
+    working_dir: /input
 
   server:
     image: python:3.11
