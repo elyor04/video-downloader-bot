@@ -6,6 +6,8 @@ services:
     container_name: video-downloader-bot-production
     restart: always
     command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
+    ports:
+      - 8080:8080
     working_dir: /app
     volumes:
       - ./:/app
