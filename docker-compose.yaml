@@ -1,24 +1,11 @@
 name: video-downloader-bot
 
 services:
-  ffmpeg:
-    image: jrottenberg/ffmpeg:4.4-alpine
-    container_name: ffmpeg
-    restart: always
-    volumes:
-      - ./input:/input
-      - ./output:/output
-    working_dir: /input
-
   server:
     image: python:3.11
     container_name: video-downloader-bot-production
     restart: always
-    depends_on:
-      - ffmpeg
-    command: sh -c "pip3 install -r requirements.txt && python3 main.py"
-    ports:
-      - 8080:8080
+    command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
     working_dir: /app
     volumes:
       - ./:/app
