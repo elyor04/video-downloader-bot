@@ -157,17 +157,15 @@ async def process_convert_to(message: Message, state: FSMContext):
     shutil.rmtree(output_path, ignore_errors=True)
     os.makedirs(output_path)
 
-    asyncio.create_task(
-        download(
-            message,
-            url,
-            download_type,
-            desired_format,
-            available_formats,
-            output_path,
-            file_name,
-            convert_to,
-        )
+    await download(
+        message,
+        url,
+        download_type,
+        desired_format,
+        available_formats,
+        output_path,
+        file_name,
+        convert_to,
     )
 
 
@@ -232,7 +230,9 @@ async def download(
 
     file_id = cr.fetchone()
     if file_id is not None:
-        await bot.send_document(message.chat.id, file_id[0])
+        await bot.send_document(
+            message.chat.id, file_id[0], reply_markup=ReplyKeyboardRemove()
+        )
         return
 
     ydl_opts = {
