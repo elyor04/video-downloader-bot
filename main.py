@@ -160,7 +160,7 @@ async def process_convert_to(message: Message, state: FSMContext):
 
 async def fetch_formats(message, url, download_type):
     try:
-        with YoutubeDL() as ydl:
+        with YoutubeDL({"cookiefile": "cookies.txt"}) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = {"video": [], "audio": []}
 
@@ -213,6 +213,7 @@ async def download(
         "format": get_format(download_type, desired_format, available_formats),
         "outtmpl": os.path.join(output_path, f"{file_name}.%(ext)s"),
         "ffmpeg_location": ffmpeg_location,
+        "cookiefile": "cookies.txt",
     }
 
     if convert_to != "original":
