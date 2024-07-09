@@ -21,7 +21,7 @@ from aiogram.client.telegram import TelegramAPIServer
 from aiogram.client.session.aiohttp import AiohttpSession
 from yt_dlp import YoutubeDL
 
-TOKEN = "6687387133:AAEv3POxdGC8cqLStkILKCYqmLiKbzaiB-A"
+TOKEN = "7276293026:AAFTcX0tlhNYpqW6FetLYKlrpgPn04qwmBY"
 api_server = TelegramAPIServer.from_base("http://telegram-bot-api:8081")
 
 bot = Bot(TOKEN, session=AiohttpSession(api=api_server))
