@@ -1,2 +1,2 @@
-aiogram==2.25.2
+aiogram==3.10.0
 yt-dlp==2024.7.7

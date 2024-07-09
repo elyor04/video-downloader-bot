@@ -1,6 +1,22 @@
 name: video-downloader-bot
 
+volumes:
+  telegram-bot-api-data:
+
 services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api-server
+    restart: always
+    environment:
+      TELEGRAM_API_ID: 28126541
+      TELEGRAM_API_HASH: 9d6c0391efbe2ff7b853545318418095
+      TELEGRAM_LOCAL: true
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    ports:
+      - 8081:8081
+
   server:
     image: python:3.11
     container_name: video-downloader-bot-production
@@ -8,8 +24,10 @@ services:
     command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
     ports:
       - 8080:8080
+    depends_on:
+      - telegram-bot-api
     working_dir: /app
     volumes:
       - ./:/app
     environment:
-      - TZ=Asia/Tashkent
+      TZ: Asia/Tashkent

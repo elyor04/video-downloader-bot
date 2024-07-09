@@ -1,96 +1,120 @@
-import logging
 import os
+import sys
 import shutil
-from aiogram import Bot, Dispatcher, executor, types
+import logging
+import asyncio
+
+from aiogram import Bot, Dispatcher
 from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     KeyboardButton,
-    InputFile,
+    FSInputFile,
+    Message,
 )
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+from aiogram.client.telegram import TelegramAPIServer
+from aiogram.client.session.aiohttp import AiohttpSession
 from yt_dlp import YoutubeDL
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
 
-API_TOKEN = "6687387133:AAEv3POxdGC8cqLStkILKCYqmLiKbzaiB-A"
+TOKEN = "6687387133:AAEv3POxdGC8cqLStkILKCYqmLiKbzaiB-A"
+api_server = TelegramAPIServer.from_base("http://telegram-bot-api:8081")
 
-logging.basicConfig(level=logging.INFO)
-
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot, storage=MemoryStorage())
+bot = Bot(TOKEN, session=AiohttpSession(api=api_server))
+dp = Dispatcher()
 
 
 class DownloadState(StatesGroup):
     url = State()
     download_type = State()
     desired_format = State()
+    available_formats = State()
     convert_to = State()
 
 
-available_formats = {}
+@dp.message(Command("start"))
+async def send_welcome(message: Message):
+    await message.reply(
+        "Welcome to Video Downloader bot!\nSend /download to start downloading.\nSend /cancel to cancel at any time."
+    )
 
 
-@dp.message_handler(commands=["start"])
-async def send_welcome(message: types.Message):
-    await message.reply("Welcome! Send /download to start downloading a video.")
-
-
-@dp.message_handler(commands=["download"])
-async def download_init(message: types.Message):
-    await DownloadState.url.set()
+@dp.message(Command("download"))
+async def download_init(message: Message, state: FSMContext):
+    await state.set_state(DownloadState.url)
     await message.reply("Please enter the video URL:")
 
 
-@dp.message_handler(state=DownloadState.url)
-async def process_url(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data["url"] = message.text
-    await DownloadState.next()
+@dp.message(Command("cancel"))
+async def download_cancel(message: Message, state: FSMContext):
+    if (await state.get_state()) is not None:
+        await state.set_state(None)
+        await message.reply("Download progress has been canceled.", reply_markup=ReplyKeyboardRemove())
+    else:
+        await message.reply("Nothing to cancel.")
 
-    download_type_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    download_type_keyboard.add(KeyboardButton("video"), KeyboardButton("audio"))
+
+@dp.message(DownloadState.url)
+async def process_url(message: Message, state: FSMContext):
+    await state.update_data(url=message.text)
+    await state.set_state(DownloadState.download_type)
+
+    download_type_keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="video"), KeyboardButton(text="audio")]],
+        resize_keyboard=True,
+    )
 
     await message.reply(
         "Please select the download type:", reply_markup=download_type_keyboard
     )
 
 
-@dp.message_handler(state=DownloadState.download_type)
-async def process_download_type(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data["download_type"] = message.text.lower()
-    await DownloadState.next()
+@dp.message(DownloadState.download_type)
+async def process_download_type(message: Message, state: FSMContext):
+    await state.update_data(download_type=message.text)
+    data = await state.get_data()
     url = data["url"]
     download_type = data["download_type"]
 
     formats = await fetch_formats(message, url, download_type)
-    available_formats[message.from_user.id] = formats
+    await state.update_data(available_formats=formats)
+    await state.set_state(DownloadState.desired_format)
 
-    format_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    for format_item in formats[download_type]:
-        format_keyboard.add(KeyboardButton(format_item))
+    format_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=format_item)] for format_item in formats[download_type]
+        ],
+        resize_keyboard=True,
+    )
 
     await message.reply(
         f"Please select the desired format:", reply_markup=format_keyboard
     )
 
 
-@dp.message_handler(state=DownloadState.desired_format)
-async def process_desired_format(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data["desired_format"] = message.text
-    await DownloadState.next()
+@dp.message(DownloadState.desired_format)
+async def process_desired_format(message: Message, state: FSMContext):
+    await state.update_data(desired_format=message.text)
+    await state.set_state(DownloadState.convert_to)
 
-    convert_to_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    convert_to_keyboard.add(
-        KeyboardButton("original"), KeyboardButton("mp4"), KeyboardButton("mkv")
-    )
-    convert_to_keyboard.add(
-        KeyboardButton("webm"),
-        KeyboardButton("mp3"),
-        KeyboardButton("m4a"),
-        KeyboardButton("wav"),
+    convert_to_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="original"),
+                KeyboardButton(text="mp4"),
+                KeyboardButton(text="mp3"),
+            ],
+            [
+                KeyboardButton(text="mkv"),
+                KeyboardButton(text="wav"),
+                KeyboardButton(text="webm"),
+                KeyboardButton(text="m4a"),
+            ],
+        ],
+        resize_keyboard=True,
     )
 
     await message.reply(
@@ -98,24 +122,34 @@ async def process_desired_format(message: types.Message, state: FSMContext):
     )
 
 
-@dp.message_handler(state=DownloadState.convert_to)
-async def process_convert_to(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data["convert_to"] = message.text
+@dp.message(DownloadState.convert_to)
+async def process_convert_to(message: Message, state: FSMContext):
+    await state.update_data(convert_to=message.text)
 
-    await state.finish()
+    data = await state.get_data()
+    await state.clear()
     url = data["url"]
     download_type = data["download_type"]
     desired_format = data["desired_format"]
+    available_formats = data["available_formats"]
     convert_to = data["convert_to"]
-    output_path = "downloads"
+    output_path = str(message.from_user.id)
     file_name = "%(title)s"
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    shutil.rmtree(output_path, ignore_errors=True)
+    os.makedirs(output_path)
 
-    await download(
-        message, url, download_type, desired_format, output_path, file_name, convert_to
+    asyncio.create_task(
+        download(
+            message,
+            url,
+            download_type,
+            desired_format,
+            available_formats,
+            output_path,
+            file_name,
+            convert_to,
+        )
     )
 
 
@@ -145,7 +179,14 @@ async def fetch_formats(message, url, download_type):
 
 
 async def download(
-    message, url, download_type, desired_format, output_path, file_name, convert_to
+    message,
+    url,
+    download_type,
+    desired_format,
+    available_formats,
+    output_path,
+    file_name,
+    convert_to,
 ):
     ffmpeg_location = shutil.which("ffmpeg")
     if not ffmpeg_location:
@@ -156,9 +197,7 @@ async def download(
         return
 
     ydl_opts = {
-        "format": get_format(
-            download_type, desired_format, available_formats[message.from_user.id]
-        ),
+        "format": get_format(download_type, desired_format, available_formats),
         "outtmpl": os.path.join(output_path, f"{file_name}.%(ext)s"),
         "ffmpeg_location": ffmpeg_location,
     }
@@ -176,10 +215,9 @@ async def download(
         for file in os.listdir(output_path):
             file_path = os.path.join(output_path, file)
             if download_type == "video":
-                await bot.send_video(message.chat.id, InputFile(file_path))
+                await bot.send_video(message.chat.id, FSInputFile(file_path))
             else:
-                await bot.send_audio(message.chat.id, InputFile(file_path))
-            os.remove(file_path)
+                await bot.send_audio(message.chat.id, FSInputFile(file_path))
 
         await bot.send_message(message.chat.id, "Download completed successfully.")
     except Exception as e:
@@ -220,4 +258,5 @@ def get_postprocessor(download_type, convert_to):
 
 
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    asyncio.run(dp.start_polling(bot))
