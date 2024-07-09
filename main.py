@@ -32,8 +32,7 @@ cr = db.cursor()
 
 cr.execute(
     "CREATE TABLE IF NOT EXISTS downloads \
-    (id INT AUTO_INCREMENT PRIMARY KEY, \
-    file_id VARCHAR(100), \
+    (file_id VARCHAR(100), \
     url VARCHAR(200), \
     download_type VARCHAR(10), \
     desired_format VARCHAR(30), \
@@ -255,12 +254,19 @@ async def download(
 
         for file in os.listdir(output_path):
             file_path = os.path.join(output_path, file)
-            file_id = (
-                await bot.send_document(message.chat.id, FSInputFile(file_path))
-            ).document.file_id
 
-            sql = "INSERT INTO downloads (file_id, url, download_type, desired_format, convert_to) VALUES (?, ?, ?, ?, ?)"
+            result = await bot.send_document(message.chat.id, FSInputFile(file_path))
+            file_id = (
+                result.document.file_id
+                if (result.document is not None)
+                else result.audio.file_id
+            )
+
+            sql = "INSERT INTO downloads \
+                (file_id, url, download_type, desired_format, convert_to) \
+                VALUES (?, ?, ?, ?, ?)"
             val = (file_id, url, download_type, desired_format, convert_to)
+
             cr.execute(sql, val)
             db.commit()
 
