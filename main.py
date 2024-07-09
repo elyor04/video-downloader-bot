@@ -256,11 +256,7 @@ async def download(
             file_path = os.path.join(output_path, file)
 
             result = await bot.send_document(message.chat.id, FSInputFile(file_path))
-            file_id = (
-                result.document.file_id
-                if (result.document is not None)
-                else result.audio.file_id
-            )
+            file_id = (result.document or result.video or result.audio).file_id
 
             sql = "INSERT INTO downloads \
                 (file_id, url, download_type, desired_format, convert_to) \
