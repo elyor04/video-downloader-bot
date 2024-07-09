@@ -52,7 +52,9 @@ async def download_init(message: Message, state: FSMContext):
 async def download_cancel(message: Message, state: FSMContext):
     if (await state.get_state()) is not None:
         await state.set_state(None)
-        await message.reply("Download progress has been canceled.", reply_markup=ReplyKeyboardRemove())
+        await message.reply(
+            "Download progress has been canceled.", reply_markup=ReplyKeyboardRemove()
+        )
     else:
         await message.reply("Nothing to cancel.")
 
@@ -80,6 +82,9 @@ async def process_download_type(message: Message, state: FSMContext):
     download_type = data["download_type"]
 
     formats = await fetch_formats(message, url, download_type)
+    if formats is None:
+        await state.set_state(None)
+        return
     await state.update_data(available_formats=formats)
     await state.set_state(DownloadState.desired_format)
 
@@ -154,10 +159,10 @@ async def process_convert_to(message: Message, state: FSMContext):
 
 
 async def fetch_formats(message, url, download_type):
-    formats = {"video": [], "audio": []}
     try:
         with YoutubeDL() as ydl:
             info = ydl.extract_info(url, download=False)
+            formats = {"video": [], "audio": []}
 
             for f in info.get("formats", []):
                 if f["audio_ext"] != "none":
@@ -171,11 +176,19 @@ async def fetch_formats(message, url, download_type):
             ]
 
             if not formats[download_type]:
-                await bot.send_message(message.chat.id, "No format found.")
+                await bot.send_message(
+                    message.chat.id,
+                    "No format found.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                return None
+            return formats
 
     except Exception as e:
-        await bot.send_message(message.chat.id, f"Error occurred: {e}")
-    return formats
+        await bot.send_message(
+            message.chat.id, f"Error occurred: {e}", reply_markup=ReplyKeyboardRemove()
+        )
+        return None
 
 
 async def download(
