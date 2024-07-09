@@ -1,8 +1,6 @@
 .git/
 .venv/
-
+*.DS_Store
 .gitignore
 .dockerignore
-
 docker-compose*
-*.DS_Store
