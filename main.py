@@ -3,6 +3,7 @@ import sys
 import shutil
 import logging
 import asyncio
+import sqlite3
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import (
@@ -20,19 +21,32 @@ from aiogram.client.telegram import TelegramAPIServer
 from aiogram.client.session.aiohttp import AiohttpSession
 from yt_dlp import YoutubeDL
 
-TOKEN = "7276293026:AAFTcX0tlhNYpqW6FetLYKlrpgPn04qwmBY"
+TOKEN = "6687387133:AAEv3POxdGC8cqLStkILKCYqmLiKbzaiB-A"
 api_server = TelegramAPIServer.from_base("http://telegram-bot-api:8081")
 
 bot = Bot(TOKEN, session=AiohttpSession(api=api_server))
 dp = Dispatcher()
+
+db = sqlite3.connect("video-downloader.db")
+cr = db.cursor()
+
+cr.execute(
+    "CREATE TABLE IF NOT EXISTS downloads \
+    (id INT AUTO_INCREMENT PRIMARY KEY, \
+    file_id VARCHAR(100), \
+    url VARCHAR(200), \
+    download_type VARCHAR(10), \
+    desired_format VARCHAR(30), \
+    convert_to VARCHAR(10))"
+)
 
 
 class DownloadState(StatesGroup):
     url = State()
     download_type = State()
     desired_format = State()
-    available_formats = State()
     convert_to = State()
+    available_formats = State()
 
 
 @dp.message(Command("start"))
@@ -209,6 +223,19 @@ async def download(
         )
         return
 
+    sql = "SELECT file_id FROM downloads \
+        WHERE url = ? \
+        AND download_type = ? \
+        AND desired_format = ? \
+        AND convert_to = ?"
+    val = (url, download_type, desired_format, convert_to)
+    cr.execute(sql, val)
+
+    file_id = cr.fetchone()
+    if file_id is not None:
+        await bot.send_document(message.chat.id, file_id[0])
+        return
+
     ydl_opts = {
         "format": get_format(download_type, desired_format, available_formats),
         "outtmpl": os.path.join(output_path, f"{file_name}.%(ext)s"),
@@ -228,12 +255,15 @@ async def download(
 
         for file in os.listdir(output_path):
             file_path = os.path.join(output_path, file)
-            if download_type == "video":
-                await bot.send_video(message.chat.id, FSInputFile(file_path))
-            else:
-                await bot.send_audio(message.chat.id, FSInputFile(file_path))
+            file_id = (
+                await bot.send_document(message.chat.id, FSInputFile(file_path))
+            ).document.file_id
 
-        await bot.send_message(message.chat.id, "Download completed successfully.")
+            sql = "INSERT INTO downloads (file_id, url, download_type, desired_format, convert_to) VALUES (?, ?, ?, ?, ?)"
+            val = (file_id, url, download_type, desired_format, convert_to)
+            cr.execute(sql, val)
+            db.commit()
+
     except Exception as e:
         await bot.send_message(message.chat.id, f"Error occurred: {e}")
     await bot.delete_message(msg.chat.id, msg.message_id)
