@@ -33,10 +33,8 @@ cr = db.cursor()
 cr.execute(
     "CREATE TABLE IF NOT EXISTS downloads \
     (file_id VARCHAR(100), \
-    url VARCHAR(200), \
-    download_type VARCHAR(10), \
-    desired_format VARCHAR(30), \
-    convert_to VARCHAR(10))"
+    media_id VARCHAR(100), \
+    media_format VARCHAR(30))"
 )
 
 
@@ -98,6 +96,7 @@ async def process_download_type(message: Message, state: FSMContext):
     if formats is None:
         await state.set_state(None)
         return
+
     await state.update_data(available_formats=formats)
     await state.set_state(DownloadState.desired_format)
 
@@ -120,17 +119,9 @@ async def process_desired_format(message: Message, state: FSMContext):
 
     convert_to_keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(text="original"),
-                KeyboardButton(text="mp4"),
-                KeyboardButton(text="mp3"),
-            ],
-            [
-                KeyboardButton(text="mkv"),
-                KeyboardButton(text="wav"),
-                KeyboardButton(text="webm"),
-                KeyboardButton(text="m4a"),
-            ],
+            [KeyboardButton(text="original")],
+            [KeyboardButton(text="mp4"), KeyboardButton(text="mp3")],
+            [KeyboardButton(text="avi"), KeyboardButton(text="wav")],
         ],
         resize_keyboard=True,
     )
@@ -174,6 +165,7 @@ async def fetch_formats(message, url, download_type):
         with YoutubeDL({"cookiefile": "cookies.txt"}) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = {"video": [], "audio": []}
+            formats["media_id"] = info.get("id", None)
 
             for f in info.get("formats", []):
                 if f["audio_ext"] != "none":
@@ -212,26 +204,34 @@ async def download(
     file_name,
     convert_to,
 ):
-    ffmpeg_location = shutil.which("ffmpeg")
-    if not ffmpeg_location:
-        await bot.send_message(
-            message.chat.id,
-            "FFmpeg is not installed. Please install FFmpeg to proceed.",
+    media_id = available_formats["media_id"]
+    media_format = (
+        desired_format
+        if (convert_to == "original")
+        else (
+            f"{desired_format.split()[0]} {convert_to}"
+            if (len(desired_format.split()) == 2)
+            else convert_to
         )
-        return
+    )
 
     sql = "SELECT file_id FROM downloads \
-        WHERE url = ? \
-        AND download_type = ? \
-        AND desired_format = ? \
-        AND convert_to = ?"
-    val = (url, download_type, desired_format, convert_to)
-    cr.execute(sql, val)
+        WHERE media_id = ? \
+        AND media_format = ?"
+    cr.execute(sql, (media_id, media_format))
 
     file_id = cr.fetchone()
     if file_id is not None:
         await bot.send_document(
             message.chat.id, file_id[0], reply_markup=ReplyKeyboardRemove()
+        )
+        return
+
+    ffmpeg_location = shutil.which("ffmpeg")
+    if not ffmpeg_location:
+        await bot.send_message(
+            message.chat.id,
+            "FFmpeg is not installed. Please install FFmpeg to proceed.",
         )
         return
 
@@ -255,16 +255,23 @@ async def download(
         for file in os.listdir(output_path):
             file_path = os.path.join(output_path, file)
 
-            result = await bot.send_document(message.chat.id, FSInputFile(file_path))
-            file_id = (result.document or result.video or result.audio).file_id
+            if file.endswith(("mp4", "avi")):
+                send_media = bot.send_video
+            elif file.endswith(("mp3", "wav")):
+                send_media = bot.send_audio
+            else:
+                send_media = bot.send_document
+
+            result = await send_media(message.chat.id, FSInputFile(file_path))
+            file_id = (result.video or result.audio or result.document).file_id
 
             sql = "INSERT INTO downloads \
-                (file_id, url, download_type, desired_format, convert_to) \
-                VALUES (?, ?, ?, ?, ?)"
-            val = (file_id, url, download_type, desired_format, convert_to)
-
-            cr.execute(sql, val)
+                (file_id, media_id, media_format) \
+                VALUES (?, ?, ?)"
+            cr.execute(sql, (file_id, media_id, media_format))
             db.commit()
+
+            break
 
     except Exception as e:
         await bot.send_message(message.chat.id, f"Error occurred: {e}")
