@@ -134,9 +134,9 @@ async def process_desired_format(message: Message, state: FSMContext):
 @dp.message(DownloadState.convert_to)
 async def process_convert_to(message: Message, state: FSMContext):
     await state.update_data(convert_to=message.text)
-
     data = await state.get_data()
     await state.clear()
+
     url = data["url"]
     download_type = data["download_type"]
     desired_format = data["desired_format"]
@@ -223,7 +223,10 @@ async def download(
     file_id = cr.fetchone()
     if file_id is not None:
         await bot.send_document(
-            message.chat.id, file_id[0], reply_markup=ReplyKeyboardRemove()
+            message.chat.id,
+            file_id[0],
+            caption="Downloaded by @video_downloader_2024_bot",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -262,7 +265,11 @@ async def download(
             else:
                 send_media = bot.send_document
 
-            result = await send_media(message.chat.id, FSInputFile(file_path))
+            result = await send_media(
+                message.chat.id,
+                FSInputFile(file_path),
+                caption="Downloaded by @video_downloader_2024_bot",
+            )
             file_id = (result.video or result.audio or result.document).file_id
 
             sql = "INSERT INTO downloads \
