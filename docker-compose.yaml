@@ -4,7 +4,7 @@ volumes:
   telegram-bot-api-data:
 
 services:
-  bot-api:
+  telegram-bot-api:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram-bot-api-server
     restart: always
@@ -23,7 +23,7 @@ services:
       - 8080:8080
     command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
     depends_on:
-      - bot-api
+      - telegram-bot-api
     working_dir: /app
     volumes:
       - .:/app
