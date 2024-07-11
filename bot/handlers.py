@@ -117,7 +117,7 @@ async def process_convert_to(message: Message, state: FSMContext):
     desired_format = data["desired_format"]
     available_formats = data["available_formats"]
     convert_to = data["convert_to"]
-    output_path = str(message.from_user.id)
+    output_path = f"downloads/{message.from_user.id}"
     file_name = "%(title)s"
 
     shutil.rmtree(output_path, ignore_errors=True)
