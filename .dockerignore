@@ -3,6 +3,7 @@
 downloads/
 __pycache__/
 
+README.md
 *.DS_Store
 .env.example
 .gitignore
