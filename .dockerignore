@@ -1,6 +1,9 @@
 .git/
 .venv/
+__pycache__/
+
 *.DS_Store
+.env.example
 .gitignore
 .dockerignore
-docker-compose*
+docker-compose.yaml

@@ -8,26 +8,24 @@ services:
     image: aiogram/telegram-bot-api:latest
     container_name: telegram-bot-api-server
     restart: always
-    environment:
-      TELEGRAM_API_ID: 28126541
-      TELEGRAM_API_HASH: 9d6c0391efbe2ff7b853545318418095
-      TELEGRAM_LOCAL: true
-    volumes:
-      - telegram-bot-api-data:/var/lib/telegram-bot-api
     ports:
       - 8081:8081
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    env_file:
+      - .env
 
   server:
     image: python:3.11
     container_name: video-downloader-bot-production
     restart: always
-    command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
     ports:
       - 8080:8080
+    command: bash -c "apt-get update && apt-get install -y ffmpeg && pip3 install -r requirements.txt && python3 main.py"
     depends_on:
       - telegram-bot-api
     working_dir: /app
     volumes:
       - ./:/app
-    environment:
-      TZ: Asia/Tashkent
+    env_file:
+      - .env
