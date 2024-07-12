@@ -51,7 +51,7 @@ def download_media(
         "cookiefile": "data/cookies.txt",
     }
 
-    if convert_to != "original":
+    if convert_to not in {"original", desired_format.split()[-1]}:
         ydl_opts["postprocessors"] = [get_postprocessor(download_type, convert_to)]
 
     try:

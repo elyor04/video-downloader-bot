@@ -124,22 +124,28 @@ async def process_convert_to(message: Message, state: FSMContext):
     os.makedirs(output_path)
 
     media_id = available_formats["media_id"]
-    media_format = (
-        desired_format
-        if (convert_to == "original")
-        else f"{desired_format.split()[0]} {convert_to}"
-        if (len(desired_format.split()) == 2)
-        else convert_to
-    )
+    desired_format_split = desired_format.split()
+
+    if convert_to in {"original", desired_format_split[-1]}:
+        media_format = desired_format
+    elif (convert_to in {"mp3", "wav"}) or (len(desired_format_split) == 1):
+        media_format = convert_to
+    else:
+        media_format = f"{desired_format_split[0]} {convert_to}"
 
     sql = "SELECT file_id FROM downloads \
         WHERE media_id = ? \
         AND media_format = ?"
     cr.execute(sql, (media_id, media_format))
 
+    if len(media_format.split()) == 2:
+        send_media = message.answer_video
+    else:
+        send_media = message.answer_audio
+
     file_id = cr.fetchone()
     if file_id:
-        await message.answer_document(
+        await send_media(
             file_id[0],
             caption="Downloaded by @video_downloader_2024_bot",
             reply_markup=ReplyKeyboardRemove(),
@@ -159,19 +165,12 @@ async def process_convert_to(message: Message, state: FSMContext):
     )
 
     if error:
-        await message.answer(error, reply_markup=ReplyKeyboardRemove())
+        await message.answer(error)
         await msg.delete()
         return
 
     file = os.listdir(output_path)[0]
     file_path = os.path.join(output_path, file)
-
-    if file.endswith(("mp4", "avi")):
-        send_media = message.answer_video
-    elif file.endswith(("mp3", "wav")):
-        send_media = message.answer_audio
-    else:
-        send_media = message.answer_document
 
     result = await send_media(
         FSInputFile(file_path), caption="Downloaded by @video_downloader_2024_bot"
